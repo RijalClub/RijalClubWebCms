@@ -1,0 +1,22 @@
+{
+  "name": "Rijal CMS Admin",
+  "short_name": "Rijal CMS",
+  "description": "Admin panel for managing Rijal Club content and media.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f8f3",
+  "theme_color": "#183228",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
