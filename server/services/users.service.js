@@ -47,6 +47,17 @@ function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase()
 }
 
+function isProtectedMasterAccount(user) {
+  if (!user) {
+    return false
+  }
+
+  return (
+    user.role === 'master' &&
+    normalizeUsername(user.username) === normalizeUsername(env.bootstrapMasterUsername)
+  )
+}
+
 function createMasterFilePermissions() {
   const permissions = {}
   for (const file of CONTENT_FILES) {
@@ -75,7 +86,10 @@ function createDefaultEditorSectionPermissions() {
 
 function sanitizeUser(user) {
   const { passwordHash, ...safeUser } = user
-  return safeUser
+  return {
+    ...safeUser,
+    protected: isProtectedMasterAccount(user),
+  }
 }
 
 function ensurePasswordStrength(password) {
@@ -310,6 +324,10 @@ async function updateUser(userId, payload, actor) {
     throw new HttpError(404, 'User not found.')
   }
 
+  if (isProtectedMasterAccount(target)) {
+    throw new HttpError(403, 'Protected master account cannot be edited.')
+  }
+
   const nextRole = payload.role ? (payload.role === 'master' ? 'master' : 'editor') : target.role
   const nextActive = payload.active === undefined ? target.active : Boolean(payload.active)
 
@@ -360,6 +378,10 @@ async function updateUserPassword(userId, newPassword, actor) {
 
   if (!target) {
     throw new HttpError(404, 'User not found.')
+  }
+
+  if (isProtectedMasterAccount(target)) {
+    throw new HttpError(403, 'Protected master account cannot be edited.')
   }
 
   target.passwordHash = await bcrypt.hash(newPassword, 12)

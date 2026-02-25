@@ -83,6 +83,7 @@ export function UsersSettingsPanel({ files, currentUser, onNotify }) {
   const fileNames = useMemo(() => files.map((entry) => entry.file), [files])
   const [users, setUsers] = useState([])
   const [drafts, setDrafts] = useState({})
+  const [expandedUsers, setExpandedUsers] = useState({})
   const [loading, setLoading] = useState(true)
   const [savingIds, setSavingIds] = useState(new Set())
   const [error, setError] = useState('')
@@ -122,6 +123,13 @@ export function UsersSettingsPanel({ files, currentUser, onNotify }) {
 
       setUsers(list)
       setDrafts(nextDrafts)
+      setExpandedUsers((prev) => {
+        const next = {}
+        for (const user of list) {
+          next[user.id] = prev[user.id] ?? false
+        }
+        return next
+      })
     } catch (apiError) {
       setError(apiError.message || 'Could not load users.')
     } finally {
@@ -152,6 +160,13 @@ export function UsersSettingsPanel({ files, currentUser, onNotify }) {
         ...prev[id],
         ...changes,
       },
+    }))
+  }
+
+  function toggleUserCard(userId) {
+    setExpandedUsers((prev) => ({
+      ...prev,
+      [userId]: !prev[userId],
     }))
   }
 
@@ -351,102 +366,130 @@ export function UsersSettingsPanel({ files, currentUser, onNotify }) {
               return null
             }
 
+            const isProtected = Boolean(user.protected) || (user.role === 'master' && user.username === 'master')
+            const expanded = Boolean(expandedUsers[user.id])
+
             return (
               <article className="user-card" key={user.id}>
-                <div className="form-grid">
-                  <label>
-                    <span>Username</span>
-                    <input type="text" value={user.username} disabled />
-                  </label>
-
-                  <label>
-                    <span>Display Name</span>
-                    <input
-                      type="text"
-                      value={draft.displayName}
-                      onChange={(event) => updateDraft(user.id, { displayName: event.target.value })}
-                    />
-                  </label>
-
-                  <label>
-                    <span>Role</span>
-                    <select
-                      value={draft.role}
-                      onChange={(event) => {
-                        const role = event.target.value
-                        updateDraft(user.id, {
-                          role,
-                          sectionPermissions: defaultSectionPermissions(role),
-                        })
-                      }}
-                    >
-                      <option value="editor">editor</option>
-                      <option value="master">master</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>Reset Password</span>
-                    <input
-                      type="password"
-                      value={draft.password}
-                      minLength={8}
-                      placeholder="Leave blank to keep"
-                      onChange={(event) => updateDraft(user.id, { password: event.target.value })}
-                    />
-                  </label>
+                <div className="card-header compact user-card-header">
+                  <div className="stack-tight">
+                    <h3>{draft.displayName || user.username}</h3>
+                    <p className="muted editor-subline">
+                      {user.username} • {draft.role} • {draft.active ? 'Active' : 'Disabled'}
+                      {isProtected ? ' • Protected master' : ''}
+                    </p>
+                  </div>
+                  <button type="button" className="btn btn-small" onClick={() => toggleUserCard(user.id)}>
+                    {expanded ? 'Collapse' : 'Edit'}
+                  </button>
                 </div>
 
-                <label className="inline-toggle">
-                  <input
-                    type="checkbox"
-                    checked={draft.active}
-                    onChange={(event) => updateDraft(user.id, { active: event.target.checked })}
-                  />
-                  <span>Active account</span>
-                </label>
+                {expanded ? (
+                  <>
+                    <div className="form-grid">
+                      <label>
+                        <span>Username</span>
+                        <input type="text" value={user.username} disabled />
+                      </label>
 
-                <div>
-                  <h3>File permissions</h3>
-                  <FilePermissionsEditor
-                    files={fileNames}
-                    permissions={draft.filePermissions}
-                    onChange={(file, value) =>
-                      updateDraft(user.id, {
-                        filePermissions: {
-                          ...draft.filePermissions,
-                          [file]: value,
-                        },
-                      })
-                    }
-                    disabled={draft.role === 'master'}
-                  />
-                </div>
+                      <label>
+                        <span>Display Name</span>
+                        <input
+                          type="text"
+                          value={draft.displayName}
+                          disabled={isProtected}
+                          onChange={(event) => updateDraft(user.id, { displayName: event.target.value })}
+                        />
+                      </label>
 
-                <div>
-                  <h3>Section permissions</h3>
-                  <SectionPermissionsEditor
-                    value={draft.sectionPermissions}
-                    onChange={(section, value) =>
-                      updateDraft(user.id, {
-                        sectionPermissions: {
-                          ...draft.sectionPermissions,
-                          [section]: value,
-                        },
-                      })
-                    }
-                    disabled={draft.role === 'master'}
-                  />
-                </div>
+                      <label>
+                        <span>Role</span>
+                        <select
+                          value={draft.role}
+                          disabled={isProtected}
+                          onChange={(event) => {
+                            const role = event.target.value
+                            updateDraft(user.id, {
+                              role,
+                              sectionPermissions: defaultSectionPermissions(role),
+                            })
+                          }}
+                        >
+                          <option value="editor">editor</option>
+                          <option value="master">master</option>
+                        </select>
+                      </label>
 
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => saveUser(user.id)}
-                  disabled={savingIds.has(user.id)}
-                >
-                  {savingIds.has(user.id) ? 'Saving...' : 'Save User'}
-                </button>
+                      <label>
+                        <span>Reset Password</span>
+                        <input
+                          type="password"
+                          value={draft.password}
+                          minLength={8}
+                          disabled={isProtected}
+                          placeholder={isProtected ? 'Protected account' : 'Leave blank to keep'}
+                          onChange={(event) => updateDraft(user.id, { password: event.target.value })}
+                        />
+                      </label>
+                    </div>
+
+                    <label className="inline-toggle">
+                      <input
+                        type="checkbox"
+                        checked={draft.active}
+                        disabled={isProtected}
+                        onChange={(event) => updateDraft(user.id, { active: event.target.checked })}
+                      />
+                      <span>Active account</span>
+                    </label>
+
+                    <div>
+                      <h3>File permissions</h3>
+                      <FilePermissionsEditor
+                        files={fileNames}
+                        permissions={draft.filePermissions}
+                        onChange={(file, value) =>
+                          updateDraft(user.id, {
+                            filePermissions: {
+                              ...draft.filePermissions,
+                              [file]: value,
+                            },
+                          })
+                        }
+                        disabled={isProtected || draft.role === 'master'}
+                      />
+                    </div>
+
+                    <div>
+                      <h3>Section permissions</h3>
+                      <SectionPermissionsEditor
+                        value={draft.sectionPermissions}
+                        onChange={(section, value) =>
+                          updateDraft(user.id, {
+                            sectionPermissions: {
+                              ...draft.sectionPermissions,
+                              [section]: value,
+                            },
+                          })
+                        }
+                        disabled={isProtected || draft.role === 'master'}
+                      />
+                    </div>
+
+                    {isProtected ? <p className="muted">Protected master account cannot be edited.</p> : null}
+
+                    {!isProtected ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => saveUser(user.id)}
+                        disabled={savingIds.has(user.id)}
+                      >
+                        {savingIds.has(user.id) ? 'Saving...' : 'Save User'}
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
               </article>
             )
           })}

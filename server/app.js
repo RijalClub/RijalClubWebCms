@@ -15,10 +15,21 @@ const { errorHandler, notFoundHandler } = require('./middleware/error.middleware
 
 function createCorsOptions() {
   const hasWildcard = env.adminOrigins.includes('*')
+  const allowedOrigins = new Set(
+    env.adminOrigins
+      .map((entry) => String(entry || '').trim().replace(/\/+$/, ''))
+      .filter(Boolean),
+  )
 
   return {
     origin(origin, callback) {
-      if (!origin || hasWildcard || env.adminOrigins.includes(origin)) {
+      if (!origin || hasWildcard) {
+        return callback(null, true)
+      }
+
+      const normalizedOrigin = String(origin).trim().replace(/\/+$/, '')
+
+      if (allowedOrigins.has(normalizedOrigin)) {
         return callback(null, true)
       }
 
@@ -40,6 +51,12 @@ function createApp() {
   app.use(
     helmet({
       crossOriginResourcePolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          imgSrc: ["'self'", 'data:', 'https://raw.githubusercontent.com'],
+          mediaSrc: ["'self'", 'data:', 'blob:', 'https://raw.githubusercontent.com'],
+        },
+      },
     }),
   )
   app.use(cors(createCorsOptions()))

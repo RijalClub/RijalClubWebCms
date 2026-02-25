@@ -371,22 +371,7 @@ function LinksEditor({ value, canWrite, onChange }) {
       <section className="card stack">
         <div className="card-header">
           <h3>Adhan Alert</h3>
-          {value.adhanAlert ? (
-            <button
-              type="button"
-              className="btn btn-danger"
-              disabled={!canWrite}
-              onClick={() =>
-                onChange((prev) => {
-                  const next = { ...prev }
-                  delete next.adhanAlert
-                  return next
-                })
-              }
-            >
-              Remove
-            </button>
-          ) : (
+          {!value.adhanAlert ? (
             <button
               type="button"
               className="btn"
@@ -406,7 +391,7 @@ function LinksEditor({ value, canWrite, onChange }) {
             >
               Enable
             </button>
-          )}
+          ) : null}
         </div>
 
         {value.adhanAlert ? (
