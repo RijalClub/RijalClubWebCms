@@ -310,11 +310,11 @@ export default function App() {
 
   /* ── Authenticated layout ── */
   return (
-    <div className="flex min-h-svh bg-background">
+    <div className="flex h-svh overflow-hidden bg-background">
       {/* ── Desktop sidebar ── */}
       <aside
         className={cn(
-          'hidden md:flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300',
+          'hidden md:sticky md:top-0 md:flex md:h-svh md:shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300',
           sidebarCollapsed ? 'w-16' : 'w-60',
         )}
       >
