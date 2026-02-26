@@ -1,3 +1,6 @@
+import { Select } from './ui/select'
+import { Label } from './ui/label'
+
 const PERMISSIONS = ['none', 'read', 'write']
 
 export function createDefaultPermissions(files, fallback = 'read') {
@@ -9,11 +12,11 @@ export function createDefaultPermissions(files, fallback = 'read') {
 
 export function FilePermissionsEditor({ files, permissions, onChange, disabled = false }) {
   return (
-    <div className="permissions-grid">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {files.map((file) => (
-        <label key={file}>
-          <span>{file}</span>
-          <select
+        <div key={file} className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">{file}</Label>
+          <Select
             value={permissions[file] || 'none'}
             onChange={(event) => onChange(file, event.target.value)}
             disabled={disabled}
@@ -23,8 +26,8 @@ export function FilePermissionsEditor({ files, permissions, onChange, disabled =
                 {level}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </div>
       ))}
     </div>
   )

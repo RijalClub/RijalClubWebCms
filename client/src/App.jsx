@@ -1,4 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  PanelLeft,
+  FileText,
+  Code2,
+  Upload,
+  Image,
+  Settings,
+  LogOut,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  ChevronRight,
+} from 'lucide-react'
 
 import { LoginPage } from './components/LoginPage'
 import { ContentEditorPanel } from './components/ContentEditorPanel'
@@ -6,6 +20,12 @@ import { MediaUploaderPanel } from './components/MediaUploaderPanel'
 import { MediaViewerPanel } from './components/MediaViewerPanel'
 import { UsersSettingsPanel } from './components/UsersSettingsPanel'
 import { VisualContentEditorPanel } from './components/VisualContentEditorPanel'
+import { ThemeToggle } from './components/ThemeToggle'
+import { Button } from './components/ui/button'
+import { Badge } from './components/ui/badge'
+import { DialogContent, DialogFooter } from './components/ui/dialog'
+import { Separator } from './components/ui/separator'
+import { cn } from './lib/utils'
 import { api } from './lib/api'
 
 const VIEWS = {
@@ -16,11 +36,15 @@ const VIEWS = {
   settings: 'settings',
 }
 
-const PERMISSION_ORDER = {
-  none: 0,
-  read: 1,
-  write: 2,
+const VIEW_META = {
+  [VIEWS.visualContent]: { label: 'Content Editor', icon: FileText, shortLabel: 'Content' },
+  [VIEWS.rawContent]: { label: 'Raw Editor', icon: Code2, shortLabel: 'Raw JSON' },
+  [VIEWS.mediaEditor]: { label: 'Media Upload', icon: Upload, shortLabel: 'Upload' },
+  [VIEWS.mediaViewer]: { label: 'Media Library', icon: Image, shortLabel: 'Library' },
+  [VIEWS.settings]: { label: 'Settings', icon: Settings, shortLabel: 'Settings' },
 }
+
+const PERMISSION_ORDER = { none: 0, read: 1, write: 2 }
 
 const SECTION_DEFAULTS = {
   visualEditor: 'read',
@@ -41,14 +65,8 @@ function hasLevel(currentLevel, requiredLevel = 'read') {
 }
 
 function getSectionLevel(user, section) {
-  if (!user) {
-    return 'none'
-  }
-
-  if (user.role === 'master') {
-    return 'write'
-  }
-
+  if (!user) return 'none'
+  if (user.role === 'master') return 'write'
   return user.sectionPermissions?.[section] || SECTION_DEFAULTS[section] || 'none'
 }
 
@@ -57,39 +75,40 @@ function resolveDefaultView(user) {
   const rawLevel = getSectionLevel(user, 'rawEditor')
   const mediaLevel = getSectionLevel(user, 'media')
 
-  if (hasLevel(visualLevel, 'read')) {
-    return VIEWS.visualContent
-  }
-
-  if (hasLevel(rawLevel, 'read')) {
-    return VIEWS.rawContent
-  }
-
-  if (hasLevel(mediaLevel, 'write')) {
-    return VIEWS.mediaEditor
-  }
-
-  if (hasLevel(mediaLevel, 'read')) {
-    return VIEWS.mediaViewer
-  }
-
-  if (user?.role === 'master') {
-    return VIEWS.settings
-  }
-
+  if (hasLevel(visualLevel, 'read')) return VIEWS.visualContent
+  if (hasLevel(rawLevel, 'read')) return VIEWS.rawContent
+  if (hasLevel(mediaLevel, 'write')) return VIEWS.mediaEditor
+  if (hasLevel(mediaLevel, 'read')) return VIEWS.mediaViewer
+  if (user?.role === 'master') return VIEWS.settings
   return VIEWS.mediaViewer
 }
 
+function permissionBadgeVariant(level) {
+  if (level === 'write') return 'success'
+  if (level === 'read') return 'warning'
+  return 'muted'
+}
+
+/* ── Toast Notification ── */
 function Notice({ notice, onClear }) {
-  if (!notice) {
-    return null
-  }
+  if (!notice) return null
 
   return (
-    <div className={`notice ${notice.kind}`}>
-      <span>{notice.message}</span>
-      <button type="button" onClick={onClear}>
-        Dismiss
+    <div className={cn(
+      'fixed bottom-4 right-4 left-4 sm:left-auto z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg backdrop-blur-sm transition-all animate-in slide-in-from-bottom-2',
+      notice.kind === 'success' && 'border-primary/30 bg-primary/10 text-primary',
+      notice.kind === 'error' && 'border-destructive/30 bg-destructive/10 text-destructive',
+      !notice.kind && 'border-border bg-card text-card-foreground',
+    )}>
+      {notice.kind === 'success' && <CheckCircle2 className="h-4 w-4 shrink-0" />}
+      {notice.kind === 'error' && <XCircle className="h-4 w-4 shrink-0" />}
+      <span className="text-sm font-medium flex-1">{notice.message}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        className="shrink-0 rounded-md p-1 opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
+      >
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   )
@@ -108,6 +127,8 @@ export default function App() {
     [VIEWS.rawContent]: false,
   })
   const [pendingLeaveAction, setPendingLeaveAction] = useState(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const sectionLevels = useMemo(
     () => ({
@@ -128,6 +149,7 @@ export default function App() {
   const visualEditorVisible = hasLevel(sectionLevels.visualEditor, 'read')
   const mediaViewerVisible = hasLevel(sectionLevels.media, 'read')
   const mediaEditorVisible = hasLevel(sectionLevels.media, 'write')
+
   const sectionBadges = useMemo(
     () =>
       Object.entries(SECTION_LABELS).map(([key, label]) => ({
@@ -137,6 +159,16 @@ export default function App() {
       })),
     [sectionLevels],
   )
+
+  const navItems = useMemo(() => {
+    const items = []
+    if (visualEditorVisible) items.push(VIEWS.visualContent)
+    if (rawEditorVisible) items.push(VIEWS.rawContent)
+    if (mediaEditorVisible) items.push(VIEWS.mediaEditor)
+    if (mediaViewerVisible) items.push(VIEWS.mediaViewer)
+    if (user?.role === 'master') items.push(VIEWS.settings)
+    return items
+  }, [visualEditorVisible, rawEditorVisible, mediaEditorVisible, mediaViewerVisible, user])
 
   const loadFiles = useCallback(async () => {
     const payload = await api.listFiles()
@@ -167,18 +199,13 @@ export default function App() {
   }, [loadSession])
 
   useEffect(() => {
-    if (!notice) {
-      return undefined
-    }
-
+    if (!notice) return undefined
     const timeout = window.setTimeout(() => setNotice(null), 4500)
     return () => window.clearTimeout(timeout)
   }, [notice])
 
   useEffect(() => {
-    if (!user) {
-      return
-    }
+    if (!user) return
 
     const visibleViews = [
       ...(visualEditorVisible ? [VIEWS.visualContent] : []),
@@ -191,18 +218,10 @@ export default function App() {
     if (!visibleViews.includes(activeView)) {
       setActiveView(visibleViews[0] || resolveDefaultView(user))
     }
-  }, [
-    activeView,
-    mediaEditorVisible,
-    mediaViewerVisible,
-    rawEditorVisible,
-    user,
-    visualEditorVisible,
-  ])
+  }, [activeView, mediaEditorVisible, mediaViewerVisible, rawEditorVisible, user, visualEditorVisible])
 
   async function handleLogin(credentials) {
     setLoginLoading(true)
-
     try {
       const payload = await api.login(credentials)
       setUser(payload.user)
@@ -223,7 +242,6 @@ export default function App() {
       setPendingLeaveAction({ type: 'logout' })
       return
     }
-
     await performLogout()
   }
 
@@ -232,10 +250,7 @@ export default function App() {
     setUser(null)
     setFiles([])
     setSelectedFile('')
-    setDirtyByView({
-      [VIEWS.visualContent]: false,
-      [VIEWS.rawContent]: false,
-    })
+    setDirtyByView({ [VIEWS.visualContent]: false, [VIEWS.rawContent]: false })
     setPendingLeaveAction(null)
     setAuthStatus('guest')
   }
@@ -245,9 +260,7 @@ export default function App() {
   }
 
   function requestViewChange(nextView) {
-    if (!nextView || nextView === activeView) {
-      return
-    }
+    if (!nextView || nextView === activeView) return
 
     const activeViewIsDirty =
       (activeView === VIEWS.visualContent && dirtyByView[VIEWS.visualContent]) ||
@@ -259,13 +272,11 @@ export default function App() {
     }
 
     setActiveView(nextView)
+    setMobileMenuOpen(false)
   }
 
   async function confirmLeaveAction() {
-    if (!pendingLeaveAction) {
-      return
-    }
-
+    if (!pendingLeaveAction) return
     const fromView = pendingLeaveAction.from || activeView
     setDirtyByView((prev) => ({ ...prev, [fromView]: false }))
     const nextAction = pendingLeaveAction
@@ -275,151 +286,311 @@ export default function App() {
       setActiveView(nextAction.view)
       return
     }
-
     await performLogout()
   }
 
+  /* ── Loading state ── */
   if (authStatus === 'checking') {
-    return <div className="loading-screen">Checking session...</div>
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Checking session...</p>
+        </div>
+      </div>
+    )
   }
 
+  /* ── Guest / Login ── */
   if (authStatus !== 'authenticated') {
     return <LoginPage onSubmit={handleLogin} loading={loginLoading} />
   }
 
+  const activeViewMeta = VIEW_META[activeView]
+
+  /* ── Authenticated layout ── */
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Rijal Club CMS</p>
-          <h1>Admin Panel</h1>
+    <div className="flex min-h-svh bg-background">
+      {/* ── Desktop sidebar ── */}
+      <aside
+        className={cn(
+          'hidden md:flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300',
+          sidebarCollapsed ? 'w-16' : 'w-60',
+        )}
+      >
+        {/* Brand */}
+        <div className={cn('flex items-center gap-3 border-b border-sidebar-border px-4 h-14', sidebarCollapsed && 'justify-center px-2')}>
+          <img src="/rijal.svg" alt="Rijal Club" className="h-7 w-7 shrink-0" />
+          {!sidebarCollapsed && (
+            <div className="min-w-0">
+              <p className="text-sm font-semibold tracking-tight truncate">Rijal Club</p>
+              <p className="text-[10px] text-sidebar-foreground/60 uppercase tracking-wider">CMS</p>
+            </div>
+          )}
         </div>
 
-        <div className="topbar-right">
-          <div className="identity-block">
-            <p className="muted">
-              Signed in as <strong>{user.displayName}</strong> ({user.role})
+        {/* Navigation */}
+        <nav className="flex-1 space-y-1 p-2">
+          {!sidebarCollapsed && (
+            <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+              Navigation
             </p>
-            <div className="permission-summary-row">
-              {sectionBadges.map((badge) => (
-                <span key={badge.key} className={`permission-badge ${badge.level}`}>
-                  {badge.label}: {badge.level}
-                </span>
-              ))}
+          )}
+          {navItems.map((viewKey) => {
+            const meta = VIEW_META[viewKey]
+            const Icon = meta.icon
+            const isActive = viewKey === activeView
+            return (
+              <button
+                key={viewKey}
+                type="button"
+                onClick={() => requestViewChange(viewKey)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer',
+                  isActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                  sidebarCollapsed && 'justify-center px-2',
+                )}
+                title={sidebarCollapsed ? meta.label : undefined}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">{meta.label}</span>}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* User section at bottom */}
+        <div className={cn('border-t border-sidebar-border p-3', sidebarCollapsed && 'p-2')}>
+          {!sidebarCollapsed && (
+            <div className="mb-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent text-xs font-bold">
+                  {(user.displayName || user.username || '?')[0].toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{user.displayName}</p>
+                  <p className="text-[10px] text-sidebar-foreground/60 capitalize">{user.role}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {sectionBadges.map((badge) => (
+                  <span
+                    key={badge.key}
+                    className={cn(
+                      'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border',
+                      badge.level === 'write' && 'border-emerald-500/40 text-emerald-400',
+                      badge.level === 'read' && 'border-amber-500/40 text-amber-400',
+                      badge.level === 'none' && 'border-sidebar-foreground/20 text-sidebar-foreground/40',
+                    )}
+                  >
+                    {badge.label}: {badge.level}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className={cn('flex gap-1', sidebarCollapsed ? 'flex-col items-center' : 'items-center')}>
+            <ThemeToggle className="border-sidebar-border text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground" />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <PanelLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="text-sidebar-foreground/70 hover:bg-destructive/20 hover:text-red-400"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Mobile menu overlay ── */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+          <div className="fixed left-0 top-0 bottom-0 w-72 bg-sidebar text-sidebar-foreground shadow-xl animate-in slide-in-from-left">
+            <div className="flex items-center justify-between border-b border-sidebar-border px-4 h-14">
+              <div className="flex items-center gap-3">
+                <img src="/rijal.svg" alt="Rijal Club" className="h-7 w-7" />
+                <span className="text-sm font-semibold tracking-tight">Rijal Club CMS</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md p-1.5 hover:bg-sidebar-accent cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <nav className="space-y-1 p-3">
+              {navItems.map((viewKey) => {
+                const meta = VIEW_META[viewKey]
+                const Icon = meta.icon
+                const isActive = viewKey === activeView
+                return (
+                  <button
+                    key={viewKey}
+                    type="button"
+                    onClick={() => {
+                      requestViewChange(viewKey)
+                      setMobileMenuOpen(false)
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer',
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span>{meta.label}</span>
+                    {isActive && <ChevronRight className="ml-auto h-4 w-4 opacity-50" />}
+                  </button>
+                )
+              })}
+            </nav>
+
+            <Separator className="bg-sidebar-border" />
+
+            <div className="p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent text-xs font-bold">
+                  {(user.displayName || '?')[0].toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{user.displayName}</p>
+                  <p className="text-xs text-sidebar-foreground/60 capitalize">{user.role}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {sectionBadges.map((badge) => (
+                  <span
+                    key={badge.key}
+                    className={cn(
+                      'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border',
+                      badge.level === 'write' && 'border-emerald-500/40 text-emerald-400',
+                      badge.level === 'read' && 'border-amber-500/40 text-amber-400',
+                      badge.level === 'none' && 'border-sidebar-foreground/20 text-sidebar-foreground/40',
+                    )}
+                  >
+                    {badge.label}: {badge.level}
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-1">
+                <ThemeToggle className="border-sidebar-border text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { handleLogout(); setMobileMenuOpen(false) }}
+                  className="text-sidebar-foreground/70 hover:bg-destructive/20 hover:text-red-400 gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign out
+                </Button>
+              </div>
             </div>
           </div>
-          <button className="btn" type="button" onClick={handleLogout}>
-            Logout
-          </button>
         </div>
-      </header>
+      )}
 
-      <nav className="view-tabs compact-tabs">
-        {visualEditorVisible ? (
+      {/* ── Main content area ── */}
+      <div className="flex flex-1 flex-col min-w-0">
+        {/* Top header bar */}
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/80 backdrop-blur-md px-4 sm:px-6">
           <button
             type="button"
-            className={`btn ${activeView === VIEWS.visualContent ? 'btn-primary' : ''}`}
-            onClick={() => requestViewChange(VIEWS.visualContent)}
+            onClick={() => setMobileMenuOpen(true)}
+            className="rounded-md p-1.5 hover:bg-secondary md:hidden cursor-pointer"
           >
-            <span className="tab-icon">CE</span>
-            Content Editor
+            <PanelLeft className="h-5 w-5" />
           </button>
-        ) : null}
 
-        {rawEditorVisible ? (
-          <button
-            type="button"
-            className={`btn ${activeView === VIEWS.rawContent ? 'btn-primary' : ''}`}
-            onClick={() => requestViewChange(VIEWS.rawContent)}
-          >
-            <span className="tab-icon">RE</span>
-            Raw Content Editor
-          </button>
-        ) : null}
+          <div className="flex items-center gap-2 min-w-0">
+            {activeViewMeta && (
+              <>
+                <activeViewMeta.icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                <h1 className="text-sm font-semibold truncate">{activeViewMeta.label}</h1>
+              </>
+            )}
+          </div>
 
-        {mediaEditorVisible ? (
-          <button
-            type="button"
-            className={`btn ${activeView === VIEWS.mediaEditor ? 'btn-primary' : ''}`}
-            onClick={() => requestViewChange(VIEWS.mediaEditor)}
-          >
-            <span className="tab-icon">ME</span>
-            Media Editor
-          </button>
-        ) : null}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="truncate max-w-[150px]">{user.displayName}</span>
+              <Badge variant="secondary" className="text-[10px]">{user.role}</Badge>
+            </div>
+          </div>
+        </header>
 
-        {mediaViewerVisible ? (
-          <button
-            type="button"
-            className={`btn ${activeView === VIEWS.mediaViewer ? 'btn-primary' : ''}`}
-            onClick={() => requestViewChange(VIEWS.mediaViewer)}
-          >
-            <span className="tab-icon">MV</span>
-            Media Viewer
-          </button>
-        ) : null}
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {activeView === VIEWS.visualContent && (
+            <VisualContentEditorPanel
+              files={accessibleFiles}
+              sectionPermission={sectionLevels.visualEditor}
+              onNotify={setNotice}
+              onDirtyChange={(dirty) => markDirty(VIEWS.visualContent, dirty)}
+            />
+          )}
 
-        {user.role === 'master' ? (
-          <button
-            type="button"
-            className={`btn ${activeView === VIEWS.settings ? 'btn-primary' : ''}`}
-            onClick={() => requestViewChange(VIEWS.settings)}
-          >
-            <span className="tab-icon">ST</span>
-            Settings
-          </button>
-        ) : null}
-      </nav>
+          {activeView === VIEWS.rawContent && (
+            <ContentEditorPanel
+              files={accessibleFiles}
+              selectedFile={selectedFile}
+              onSelectFile={setSelectedFile}
+              onNotify={setNotice}
+              sectionPermission={sectionLevels.rawEditor}
+              onDirtyChange={(dirty) => markDirty(VIEWS.rawContent, dirty)}
+            />
+          )}
 
-      <main className="main-content">
-        {activeView === VIEWS.visualContent ? (
-          <VisualContentEditorPanel
-            files={accessibleFiles}
-            sectionPermission={sectionLevels.visualEditor}
-            onNotify={setNotice}
-            onDirtyChange={(dirty) => markDirty(VIEWS.visualContent, dirty)}
-          />
-        ) : null}
+          {activeView === VIEWS.mediaEditor && <MediaUploaderPanel onNotify={setNotice} />}
 
-        {activeView === VIEWS.rawContent ? (
-          <ContentEditorPanel
-            files={accessibleFiles}
-            selectedFile={selectedFile}
-            onSelectFile={setSelectedFile}
-            onNotify={setNotice}
-            sectionPermission={sectionLevels.rawEditor}
-            onDirtyChange={(dirty) => markDirty(VIEWS.rawContent, dirty)}
-          />
-        ) : null}
+          {activeView === VIEWS.mediaViewer && <MediaViewerPanel onNotify={setNotice} />}
 
-        {activeView === VIEWS.mediaEditor ? <MediaUploaderPanel onNotify={setNotice} /> : null}
+          {activeView === VIEWS.settings && user.role === 'master' && (
+            <UsersSettingsPanel files={files} currentUser={user} onNotify={setNotice} />
+          )}
+        </main>
+      </div>
 
-        {activeView === VIEWS.mediaViewer ? <MediaViewerPanel onNotify={setNotice} /> : null}
-
-        {activeView === VIEWS.settings && user.role === 'master' ? (
-          <UsersSettingsPanel files={files} currentUser={user} onNotify={setNotice} />
-        ) : null}
-      </main>
-
+      {/* ── Toast notification ── */}
       <Notice notice={notice} onClear={() => setNotice(null)} />
 
-      {pendingLeaveAction ? (
-        <div className="modal-shell" role="dialog" aria-modal="true" aria-label="Discard changes">
-          <div className="modal-backdrop" onClick={() => setPendingLeaveAction(null)} />
-          <section className="modal-card">
-            <h3>Unsaved Changes</h3>
-            <p>Your edits are not published yet. Leaving this editor now will discard those changes.</p>
-            <div className="button-row">
-              <button type="button" className="btn" onClick={() => setPendingLeaveAction(null)}>
-                Stay
-              </button>
-              <button type="button" className="btn btn-danger" onClick={confirmLeaveAction}>
-                Leave Without Publishing
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      {/* ── Unsaved changes dialog ── */}
+      {pendingLeaveAction && (
+        <DialogContent
+          title="Unsaved Changes"
+          description="Your edits are not published yet. Leaving this editor now will discard those changes."
+          onClose={() => setPendingLeaveAction(null)}
+        >
+          <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+            <p className="text-foreground">Any unpublished changes will be permanently lost.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingLeaveAction(null)}>
+              Stay
+            </Button>
+            <Button variant="destructive" onClick={confirmLeaveAction}>
+              Leave Without Publishing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      )}
     </div>
   )
 }

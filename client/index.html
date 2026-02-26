@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,6 +16,16 @@
     <link rel="mask-icon" href="/rijal.svg" color="#0f1913" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <title>Rijal CMS Admin</title>
+    <script>
+      // Prevent flash of wrong theme
+      try {
+        const theme = localStorage.getItem('rijal-cms-theme') || 'light';
+        if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.remove('light');
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
