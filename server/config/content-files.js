@@ -6,7 +6,7 @@ const DEFAULT_CONTENT_FILES = [
   'prayer.json',
   'store.json',
   'quran.json',
-  'hadith.json',
+  'library.json',
   'contact.json',
   'cache.json',
 ]

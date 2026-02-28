@@ -20,9 +20,9 @@ const MEDIA_FOLDER_OPTIONS = [
     path: 'images/profile',
   },
   {
-    id: 'hadith-covers',
-    label: 'Hadith Covers',
-    path: 'images/hadith/covers',
+    id: 'library-covers',
+    label: 'Library Covers',
+    path: 'images/library/covers',
   },
 ]
 
